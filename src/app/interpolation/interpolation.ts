@@ -14,7 +14,7 @@ export function haversine(lat1: number, lon1: number, lat2: number, lon2: number
 
 
 export function inversedWeightedInterpolation(allMarkers: any[], lat: number, lon: number) {
-  const s: number = 2;
+  const s: number = 0.5;
   const p: number = 1;
   let numerator = 0;
   let denominator = 0;

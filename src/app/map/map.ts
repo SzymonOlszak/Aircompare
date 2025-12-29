@@ -41,6 +41,15 @@ export class Map implements OnInit {
   private warsawIoTLayer = L.layerGroup();
   private openAQLayer = L.layerGroup();
 
+  private sourceLayers: Record<string, L.LayerGroup> = {
+    gios: this.giosLayer,
+    airly: this.airlyLayer,
+    'airly (saved)': this.airlyLayer,
+    openaq: this.openAQLayer,
+    aqicn: this.aqicnLayer,
+    warsawIoT: this.warsawIoTLayer,
+  };
+
   public viewMode: 'sources' | 'caqi' ='sources';
   public interpolationViewMode : 'on' | 'off' = 'off';
   public measurements: any[] = [];
@@ -48,6 +57,8 @@ export class Map implements OnInit {
 
   async ngOnInit(): Promise <void> {
       this.runMap();
+      console.log('MAP BEFORE addLayer', this.map);
+
       this.addLayer();
 
       await Promise.all([
@@ -55,7 +66,7 @@ export class Map implements OnInit {
         this.getGIOS(),
         this.getAirly(),
         this.getWarsawIoT(),
-        this.getAQICN()
+        this.getAQICN(),
       ]);
 
       this.addMarkers()
@@ -78,12 +89,13 @@ export class Map implements OnInit {
       console.log("TU JEST GRID", this.grid);
 
       console.log("te caqi", this.caqiMarkers)
+      console.log("warstwyyy", this.giosLayer)
   }
 
   private runMap(): void {
     this.map = L.map('map', {
       center: [52.2297, 21.0122], //Warsaw
-      zoom: 11,
+      zoom: 10,
       zoomControl: true,
       scrollWheelZoom: true,
       dragging: true,
@@ -99,7 +111,21 @@ export class Map implements OnInit {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(this.map);
-    this.sourceLayer.addTo(this.map);
+    this.giosLayer.addTo(this.map);
+    this.airlyLayer.addTo(this.map);
+    this.openAQLayer.addTo(this.map);
+    this.aqicnLayer.addTo(this.map);
+    this.warsawIoTLayer.addTo(this.map);
+
+    // this.sourceLayer.addTo(this.map);
+
+    // L.control.layers( {             /////WRÓĆ DO TEGO CZY NA PEWNO TU MA SENS................................
+    //   Gios: this.giosLayer,
+    //   Airly: this.airlyLayer,
+    //   OpenAQ: this.openAQLayer,
+    //   AQICN: this.aqicnLayer,
+    //   'Warsaw IoT': this.warsawIoTLayer,
+    // }).addTo(this.map);
   }
 
    toggleView(): void {
@@ -267,7 +293,7 @@ export class Map implements OnInit {
   }
 
   private addMarkers(): void {
-    const caqis: number[] = [];
+
     const grouped: { [key: string]: any[] } = {};
 
     for (const loc of this.allData) {
@@ -388,7 +414,7 @@ export class Map implements OnInit {
       const hasIoT = sources.includes('warsawIoT');
       const hasAQICN = sources.includes('aqicn');
 
-      let icon: L.DivIcon | L.Icon;
+      let icon: L.DivIcon;
 
       if (hasGios && hasAirly && hasOpenAQ && hasIoT && hasAQICN) {
         icon = this.createUltimateIcon();
@@ -419,10 +445,18 @@ export class Map implements OnInit {
         icon = this.createAQIcon(true);
       }
 
-      L.marker([lat, lon], {icon})
+      const marker = L.marker([lat, lon], {icon})
         .on("click", () => this.loadMeasurements(locations[0]))
-        .bindPopup(this.buildPopupContent(locations))
-        .addTo(this.sourceLayer);
+        .bindPopup(this.buildPopupContent(locations));
+
+
+      // marker.addTo(this.sourceLayer);
+
+      for (const s of sources) {
+        const layer = this.sourceLayers[s];
+        console.log("TU ŹRODLO", layer)
+        if (layer) marker.addTo(layer);
+      }
     }
   }
 
@@ -536,11 +570,11 @@ export class Map implements OnInit {
     let hop = 0;
     let intensivity = 0;
     const caqiLevels = [
-      { v: 0,   c: [18, 255, 182] },
+      { v: 0,   c: [18, 200, 182] },
       { v: 25,  c: [74, 255, 82] },
       { v: 50,  c: [249, 244, 48] },
-      { v: 75,  c: [249, 135, 48] },
-      { v: 100, c: [249, 49, 48] }]
+      { v: 75,  c: [255, 135, 48] },
+      { v: 100, c: [255, 49, 20] }]
 
     for (hop; hop < caqiLevels.length; hop++) {
       if (caqi >= caqiLevels[hop].v && caqi < caqiLevels[hop + 1].v) {
