@@ -1,11 +1,14 @@
 import { Component, OnInit } from '@angular/core';
 import * as L from 'leaflet';
 import {CommonModule} from '@angular/common';
-import {calculateCAQI, PM25Breakpoints, O3Breakpoints, PM10Breakpoints, NO2Breakpoints} from '../aqi/caqi';
+import {calculateCAQI, calculateCAQIFromCell, PM25Breakpoints, O3Breakpoints, PM10Breakpoints, NO2Breakpoints} from '../aqi/caqi';
 import {inversedWeightedInterpolation} from '../interpolation/interpolation';
-
-const openAQ = '67b897ddb5f0fbc65cdab9c01115fa763ca4ad5240292679988a951db098180b';
-const bbox = "20.85,52.10,21.20,52.35";
+import {getWindVector, runAdvectionDiffusion} from '../prediction/prediction'
+import {min} from 'rxjs';
+// export interface WindData {
+//   direction: number;
+//   speed: number;
+// }
 
 @Component({
   selector: 'app-map',
@@ -18,8 +21,7 @@ const bbox = "20.85,52.10,21.20,52.35";
 export class Map implements OnInit {
   private map: any;
   private allData: any[] = [];
-  private allFreshData: any[] = [];
-  private caqiMarkers: {                   //punkty
+  private caqiMarkers: {
     lat: number;
     lon: number;
     caqi: number | null;
@@ -27,75 +29,214 @@ export class Map implements OnInit {
     pollutants: any;
   }[] = [];
 
+  public windData?: {
+    direction: number,
+    speed: number
+  };
+
+  private windVector?: {
+    u: number,
+    v: number
+  }
+
   private grid: {                        //interpolacja
     lat: number,
     lon: number,
     caqi: number}[] = []
 
-  private sourceLayer = L.layerGroup();                     //warstwy
+  private predictionGrid!: {
+    pm10: number,
+    pm25: number,
+    o3: number,
+    no2: number } [][];
+
+  private predictionGrids!: {
+    pm10: number[][],
+    pm25: number[][] ,
+    o3: number[][],
+    no2: number[][]};
+
+  private halfHourPrediction: {
+    lat: number,
+    lon: number,
+    caqi: number}[] = []
+
+  private oneHourPrediction: {
+    lat: number,
+    lon: number,
+    caqi: number}[] = []
+
+  private twoHoursPrediction: {
+    lat: number,
+    lon: number,
+    caqi: number}[] = []
+
+  public predictionViewStatus: 0.5 | 1 | 2 | null = null;
+  //warstwy
   private caqiLayer = L.layerGroup();
   private interpolationLayer = L.layerGroup();
-  private giosLayer = L.layerGroup();
-  private airlyLayer = L.layerGroup();
-  private aqicnLayer = L.layerGroup();
-  private warsawIoTLayer = L.layerGroup();
-  private openAQLayer = L.layerGroup();
+  private predictionLayer = L.layerGroup();
 
-  private sourceLayers: Record<string, L.LayerGroup> = {
-    gios: this.giosLayer,
-    airly: this.airlyLayer,
-    'airly (saved)': this.airlyLayer,
-    openaq: this.openAQLayer,
-    aqicn: this.aqicnLayer,
-    warsawIoT: this.warsawIoTLayer,
-  };
+  private allSourcesLayer = L.layerGroup();
+  private allMarkers: {
+    marker: L.Marker;
+    sources: string[];
+  }[] = []
 
-  public viewMode: 'sources' | 'caqi' ='sources';
+  private chosenSources: Record<string, boolean> = {
+    gios: true,
+    openaq: true,
+    airly: true,
+    'airly (saved)': true,
+    aqicn: true,
+    warsawIoT: true,
+  }
+
+  public viewMode: 'sources' | 'caqi' = 'sources';
   public interpolationViewMode : 'on' | 'off' = 'off';
+  public predictionViewMode : 'on' | 'off' = 'off';
   public measurements: any[] = [];
   public stationTitle: string = "";
 
   async ngOnInit(): Promise <void> {
-      this.runMap();
-      console.log('MAP BEFORE addLayer', this.map);
+    this.runMap();
+    console.log('MAP BEFORE addLayer', this.map);
 
-      this.addLayer();
+    this.addLayer();
 
-      await Promise.all([
-        this.getOpenAQ(),
-        this.getGIOS(),
-        this.getAirly(),
-        this.getWarsawIoT(),
-        this.getAQICN(),
-      ]);
+    await Promise.all([
+      this.getOpenAQ(),
+      this.getGIOS(),
+      this.getAirly(),
+      this.getWarsawIoT(),
+      this.getAQICN(),
+      this.getWind()
+    ]);
 
-      this.addMarkers()
-      const bounds = this.map.getBounds();
+    this.addMarkers()
+    if (this.windData) {
+      this.windVector = getWindVector(this.windData.direction, this.windData.speed)
+    }
+    console.log("WIAAAAATER", this.windVector)
 
-      const minLat = bounds.getSouth();
-      const maxLat = bounds.getNorth();
-      const minLon = bounds.getWest();
-      const maxLon = bounds.getEast();
-      const step = 0.01
-           //INTERPOLACJA
-      for (let lat = minLat; lat < maxLat; lat += step) {
-        for (let lon = minLon; lon < maxLon; lon += step) {
-          const value = inversedWeightedInterpolation(this.caqiMarkers, lat, lon)
-          if (value !== null) {
-            this.grid.push({lat, lon, caqi: Math.round(value * 10) / 10})
+    const bounds = this.map.getBounds();
+    const minLat = 51.95;
+    const maxLat = 52.5;
+    const minLon = 20.1;
+    const maxLon = 21.8;
+    // const bounds = this.map.getBounds();
+    // const minLat = bounds.getSouth();
+    // const maxLat = bounds.getNorth();
+    // const minLon = bounds.getWest();
+    // const maxLon = bounds.getEast();
+    const step = 0.01;
+    let maxWind = 0;
+    // const steps = 1000;
+    if (this.windVector) maxWind = Math.max(Math.abs(this.windVector.u), Math.abs(this.windVector.v)) * 1000 / 3600
+
+    const latAngle = (minLat + maxLat) * 0.5 * Math.PI / 180
+
+    const hy = 1110;
+    const hx = hy * Math.cos(latAngle)
+    const kappa = 0.05
+    const u = this.windVector?.u ?? 0
+    const v = this.windVector?.v ?? 0
+    // const dt = 0.5 * h / maxWind;  //bo dt nie może być większy niż czas przeskoku 1 kratki wiatru
+    const dtAdvX = hx / Math.abs(u)
+    const dtAdvY = hy / Math.abs(v)
+    const dtAdvection = 0.5 * Math.min(dtAdvX, dtAdvY)
+
+    const dtDiffusion = 0.25 * (hx*hx * hy*hy) / (kappa * (hx*hx + hy*hy))
+
+    const dt = Math.min(dtAdvection, dtDiffusion)
+
+    const steps30 = Math.round((0.5 * 3600) / dt);
+    const steps60 = Math.round((1 * 3600) / dt);
+    const steps120 = Math.round((2 * 3600) / dt);
+
+    const predictionHours = 2;
+    const steps = Math.round((predictionHours * 3600) / dt);
+    const y = Math.floor((maxLat - minLat) / step);      //DLA OSI Y, ile przeskoków, LONGITUDE
+    const x = Math.floor((maxLon - minLon) / step);      //DLA OSI X, ile przeskoków, LATITUDE
+    this.predictionGrids = {
+      pm10: Array.from({ length: y }, () => Array(x).fill(0)),
+      pm25: Array.from({ length: y }, () => Array(x).fill(0)),
+      no2:  Array.from({ length: y }, () => Array(x).fill(0)),
+      o3:   Array.from({ length: y }, () => Array(x).fill(0)),
+    };
+
+                //INTERPOLACJA
+    for (let i = 0; i < y; i++) {   //LONGITUDE
+      for (let j = 0; j < x; j++) {  //LATITUDE
+        const lat = minLat + (i + 0.5) * step;
+        const lon = minLon + (j + 0.5) * step;
+
+        const pm10 = inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "pm10") ?? 0
+        const pm25 = inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "pm25") ?? 0
+        const no2 = inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "no2") ?? 0
+        const o3 = inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "o3") ?? 0
+
+        const caqi: number = Math.max(calculateCAQI(pm10, PM10Breakpoints) ?? 0, calculateCAQI(pm25, PM25Breakpoints) ?? 0, calculateCAQI(no2, NO2Breakpoints) ?? 0, calculateCAQI(o3, O3Breakpoints) ?? 0)
+
+        if (caqi) {
+          this.predictionGrids.no2[i][j] = no2
+          this.predictionGrids.pm10[i][j] = pm10
+          this.predictionGrids.o3[i][j] = o3
+          this.predictionGrids.pm25[i][j] = pm25
+          this.grid.push({lat, lon, caqi: Math.round(caqi * 10) / 10})
+        }
+      }
+    }
+
+    for (const steps of [steps30, steps60, steps120]) {
+      for (const pollutant of ['pm10','pm25','no2','o3'] as const) {
+        this.predictionGrids[pollutant] = runAdvectionDiffusion(this.predictionGrids[pollutant], steps, u, v, dt, hx, hy, kappa);
+      }
+
+      for (let i = 0; i < y; i++) {
+        for (let j = 0; j < x; j++) {
+          const caqi = calculateCAQIFromCell({
+            pm10: this.predictionGrids.pm10[i][j],
+            pm25: this.predictionGrids.pm25[i][j],
+            no2: this.predictionGrids.no2[i][j],
+            o3: this.predictionGrids.o3[i][j],
+          });
+
+          if (steps==steps30) {
+            this.halfHourPrediction.push({
+              lat: minLat + i * step,
+              lon: minLon + j * step,
+              caqi: caqi
+            })
+          } else if (steps == steps60) {
+            this.oneHourPrediction.push({
+              lat: minLat + i * step,
+              lon: minLon + j * step,
+              caqi: caqi
+            })
+          } else if (steps == steps120) {
+            this.twoHoursPrediction.push({
+              lat: minLat + i * step,
+              lon: minLon + j * step,
+              caqi: caqi
+            })
           }
         }
       }
-      console.log("TU JEST GRID", this.grid);
+    }
 
-      console.log("te caqi", this.caqiMarkers)
-      console.log("warstwyyy", this.giosLayer)
+    console.log("TU JEST GRID", this.grid);
+    console.log("TU DO PREDYKCJI?", this.predictionGrid)
+    console.log("TU PREDYKCJA????", this.twoHoursPrediction)
+    console.log("te caqi", this.caqiMarkers)
   }
 
   private runMap(): void {
     this.map = L.map('map', {
       center: [52.2297, 21.0122], //Warsaw
       zoom: 10,
+      minZoom: 10,
+      maxBounds: [[52,20.3],[52.45,21.6]],
       zoomControl: true,
       scrollWheelZoom: true,
       dragging: true,
@@ -111,47 +252,78 @@ export class Map implements OnInit {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(this.map);
-    this.giosLayer.addTo(this.map);
-    this.airlyLayer.addTo(this.map);
-    this.openAQLayer.addTo(this.map);
-    this.aqicnLayer.addTo(this.map);
-    this.warsawIoTLayer.addTo(this.map);
-
-    // this.sourceLayer.addTo(this.map);
-
-    // L.control.layers( {             /////WRÓĆ DO TEGO CZY NA PEWNO TU MA SENS................................
-    //   Gios: this.giosLayer,
-    //   Airly: this.airlyLayer,
-    //   OpenAQ: this.openAQLayer,
-    //   AQICN: this.aqicnLayer,
-    //   'Warsaw IoT': this.warsawIoTLayer,
-    // }).addTo(this.map);
+    this.allSourcesLayer.addTo(this.map);
   }
 
-   toggleView(): void {
-     if (this.viewMode === 'sources') {
-       this.map.removeLayer(this.sourceLayer);
-       this.map.addLayer(this.caqiLayer);
-       this.drawCaqiMarkers();
-       this.viewMode = 'caqi';
-     } else {
-       this.map.removeLayer(this.caqiLayer);
-       this.map.addLayer(this.sourceLayer);
-       this.viewMode = 'sources';
-     }
-   }
+  toggleView(): void {
+    if (this.viewMode === 'sources') {
+      this.map.removeLayer(this.allSourcesLayer);
+      this.drawCaqiMarkers();
+      this.map.addLayer(this.caqiLayer);
+      this.viewMode = 'caqi';
 
-   interpolationView (): void {
-     if (this.interpolationViewMode === 'off') {
-       this.interpolationViewMode = 'on';
-       this.drawInterpolation()
-       this.map.addLayer(this.interpolationLayer);
+    } else {
+      this.map.removeLayer(this.caqiLayer);
+      this.drawMarkers()
+      this.map.addLayer(this.allSourcesLayer);
+      this.viewMode = 'sources'
+    }
+  }
 
-     } else {
-       this.interpolationViewMode = 'off';
-       this.map.removeLayer(this.interpolationLayer);
-     }
-   }
+  toggleSource(source: string, event: Event): void {
+    const isChecked = (event.target as HTMLInputElement).checked;       //zamiast klasycznego getdocumentbyid, to angular
+    this.chosenSources[source] = isChecked;                                      //zmienia na true lub false zależnie czy 'odhaczony'
+    if (this.viewMode == 'sources') {
+      this.drawMarkers();
+    }
+    else if (this.viewMode == 'caqi') {
+      this.drawCaqiMarkers()
+    }
+  }
+
+  interpolationView (): void {
+    if (this.interpolationViewMode === 'off') {
+      this.interpolationViewMode = 'on';
+      this.drawInterpolation()
+      this.map.addLayer(this.interpolationLayer);
+    } else {
+      this.interpolationViewMode = 'off';
+      this.map.removeLayer(this.interpolationLayer);
+    }
+  }
+
+  predictionView (h: 0.5 | 1 | 2): void {
+    if (h == this.predictionViewStatus) {
+      this.map.removeLayer(this.predictionLayer);
+      this.predictionViewStatus = null;
+    }
+    else {
+      this.map.removeLayer(this.predictionLayer);
+      this.predictionViewStatus = h
+      this.drawPrediction(h)
+      this.map.addLayer(this.predictionLayer);
+    }
+  }
+
+  private async getWind() {
+    try {
+      const response = await fetch("http://localhost:3000/api/wind");
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json()
+
+      this.windData = {
+        direction: data.direction,
+        speed: data.speed,
+      }
+      console.log("WIATR:", this.windData);
+
+    } catch (error) {
+      console.error("getOpenAQ error:", error);
+    }
+  }
 
   private async getOpenAQ() {
     try {
@@ -165,12 +337,8 @@ export class Map implements OnInit {
       this.allData.push(...data);
       console.log("API data:", this.allData);
 
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        console.error("Error:", error.message);
-      } else {
-        console.error("Unknown error:", error);
-      }
+    } catch (error) {
+      console.error("getOpenAQ error:", error);
     }
   }
 
@@ -178,20 +346,15 @@ export class Map implements OnInit {
     try {
       const response = await fetch("http://localhost:3000/api/gios");
       const data = await response.json()
-      console.log("todata", data)
+
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
 
       this.allData.push(...data);
-
       console.log("API data:", this.allData);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        console.error("Error:", error.message);
-      } else {
-        console.error("Unknown error:", error);
-      }
+    } catch (error) {
+      console.error("getGIOS error:", error);
     }
   }
 
@@ -206,12 +369,8 @@ export class Map implements OnInit {
       this.allData.push(...data);
 
       console.log("API data:", this.allData);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        console.error("Error:", error.message);
-      } else {
-        console.error("Unknown error:", error);
-      }
+    } catch (error) {
+      console.error("getAirly error:", error);
     }
   }
 
@@ -226,12 +385,8 @@ export class Map implements OnInit {
       this.allData.push(...data);
 
       console.log("API data:", this.allData);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        console.error("Error:", error.message);
-      } else {
-        console.error("Unknown error:", error);
-      }
+    } catch (error) {
+      console.error("getWarsawIoT error:", error);
     }
   }
 
@@ -247,8 +402,8 @@ export class Map implements OnInit {
       console.log("Aqicn", data)
       this.allData.push(...data);
 
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error("getAQICN error:", error);
     }
   }
 
@@ -328,33 +483,43 @@ export class Map implements OnInit {
                 if (!this.checkTime(p.time)) {continue}
 
                 if (p.name.toUpperCase() === 'PM10') {
-                  pm10Candidates.push({
-                    value: p.value,
-                    source: loc.source
-                  })
+                  if (p.value !== null) {
+                    pm10Candidates.push({
+                      value: p.value,
+                      source: loc.source
+                    })
+                  }
+
                 }
-                if (p.name.toUpperCase() === 'PM25') {
-                  pm25Candidates.push({
-                    value: p.value,
-                    source: loc.source
-                  })
+                if (p.name.toUpperCase() === 'PM25' || p.name.toUpperCase() === 'PM2.5') {
+                  if (p.value !== null) {
+                    pm25Candidates.push({
+                      value: p.value,
+                      source: loc.source
+                    })
+                  }
                 }
                 if (p.name.toUpperCase() === 'NO2') {
-                  no2Candidates.push({
-                    value: p.value,
-                    source: loc.source
-                  })
+                  if (p.value !== null) {
+                    no2Candidates.push({
+                      value: p.value,
+                      source: loc.source
+                    })
+                  }
                 }
                 if (p.name.toUpperCase() === 'O3') {
-                  o3Candidates.push({
-                    value: p.value,
-                    source: loc.source
-                  })
+                  if (p.value !== null) {
+                    o3Candidates.push({
+                      value: p.value,
+                      source: loc.source
+                    })
+                  }
                 }
 
               }
             }
           }
+
           if (pm10Candidates.length > 0) {
             pollutants.pm10 = Math.max(...pm10Candidates.map(v => (v.value)))
           }
@@ -371,15 +536,18 @@ export class Map implements OnInit {
             pollutants.pm25 = Math.max(...pm25Candidates.map(v => (v.value)))
           }
 
-          if (loc.source === 'aqicn' && loc.measurements) {
+          const checkAqicn = this.checkTime(loc.time?.stime)
+          if (loc.source === 'aqicn' && checkAqicn && loc.measurements) {
             const values = loc.measurements
 
             if (pollutants.pm10 == null || pollutants.pm10 < values.pm10) {
               pollutants.pm10 = values.pm10 ?? pollutants.pm10;
             }
-
-            if ((pollutants.pm25 == null && values.pm25 < values.pm10 * 1.5) ||
-              (pollutants.pm25 != null && pollutants.pm25 < values.pm25 && values.pm25 < values.pm10 * 1.5)) {
+            // if ((pollutants.pm25 == null && values.pm25 < values.pm10 * 1.3) ||
+            //   (pollutants.pm25 != null && pollutants.pm25 < values.pm25 && values.pm25 < values.pm10 * 1.3)) {
+            //   pollutants.pm25 = values.pm25 ?? pollutants.pm25;
+            // }
+            if (pollutants.pm25 == null ||  pollutants.pm25 < values.pm25) {
               pollutants.pm25 = values.pm25 ?? pollutants.pm25;
             }
 
@@ -393,18 +561,15 @@ export class Map implements OnInit {
           }
         }
 
-      if (pollutants !== null) {
+      if (pollutants.pm25 !== null || pollutants.pm10 !== null || pollutants.no2 !== null || pollutants.o3 !== null ) {
         const caqi = this.getCAQI(pollutants);
-        console.log("jakieś CAQI bo czemu nie", caqi)
-
-        this.caqiMarkers.push({
-          lat,
-          lon,
-          caqi,
-          sources,
-          pollutants
-        });
-
+          this.caqiMarkers.push({
+            lat,
+            lon,
+            caqi,
+            sources,
+            pollutants
+          });
       }
 
       const airlyConditions = ['airly', 'airly (saved)']
@@ -442,39 +607,51 @@ export class Map implements OnInit {
         icon = this.createAqicnIcon();
       }
       else {
-        icon = this.createAQIcon(true);
+        icon = this.createopenAQIcon(true);
       }
 
       const marker = L.marker([lat, lon], {icon})
-        .on("click", () => this.loadMeasurements(locations[0]))
         .bindPopup(this.buildPopupContent(locations));
 
+      this.allMarkers.push({
+        marker,
+        sources
+      });
+      marker.addTo(this.allSourcesLayer)
+      // for (const s of sources) {
+      //   const layer = this.sourceLayers[s];
+      //   if (layer) marker.addTo(layer);
+      // }
 
-      // marker.addTo(this.sourceLayer);
-
-      for (const s of sources) {
-        const layer = this.sourceLayers[s];
-        console.log("TU ŹRODLO", layer)
-        if (layer) marker.addTo(layer);
+    }
+  }
+  private drawMarkers(): void {
+    this.allSourcesLayer.clearLayers();
+    for (const m of this.allMarkers) {
+      const isActive = m.sources.some(source => this.chosenSources[source])
+      if (isActive) {
+        m.marker.addTo(this.allSourcesLayer)
       }
     }
   }
-
   private drawCaqiMarkers(): void {
     this.caqiLayer.clearLayers();
 
     for (const m of this.caqiMarkers) {
       if (m.caqi == null) continue;
 
+      const isActive = m.sources.some(source => this.chosenSources[source])
+      if (!isActive) {continue}
+
       const icon = this.createCaqiIcon(m.caqi);
 
       L.marker([m.lat, m.lon], { icon })
         .bindPopup(`
           <b>CAQI:</b> ${m.caqi}<br>
-          PM10: ${m.pollutants.pm10 ?? '-'}<br>
-          PM2.5: ${m.pollutants.pm25 ?? '-'}<br>
-          NO2: ${m.pollutants.no2 ?? '-'}<br>
-          O3: ${m.pollutants.o3 ?? '-'}
+          PM10: ${Math.round(m.pollutants.pm10) ?? '-'}<br>
+          PM2.5: ${Math.round(m.pollutants.pm25) ?? '-'}<br>
+          NO2: ${Math.round(m.pollutants.no2) ?? '-'}<br>
+          O3: ${Math.round(m.pollutants.o3) ?? '-'}
         `)
         .addTo(this.caqiLayer);
     }
@@ -486,95 +663,89 @@ export class Map implements OnInit {
     for (const i of this.grid) {
       const color = this.paintCaqi(i.caqi)
       if (color != null) {
-        const cornerOne = L.latLng(i.lat, i.lon)
-        const cornerTwo = L.latLng(i.lat + step, i.lon + step)
+        const cornerOne = L.latLng(i.lat - step / 2, i.lon - step / 2)
+        const cornerTwo = L.latLng(i.lat + step / 2, i.lon + step / 2)
         const bounds= L.latLngBounds(cornerOne, cornerTwo)
         const icon = L.rectangle(bounds,{
           fillColor: `rgb(${color[0]}, ${color[1]}, ${color[2]})`,
-          fillOpacity: 0.8,
+          fillOpacity: 0.7,
           stroke: false
         }).addTo(this.interpolationLayer);
         // L.marker([i.lat, i.lon], {icon}).addTo(this.interpolationLayer)
       }
     }
+  }
 
+  private drawPrediction(h:number) {
+    this.predictionLayer.clearLayers();
+    const step = 0.01;
+    let period: {lat: number; lon: number; caqi: number }[] = [];
+
+    if (h == 0.5) {
+      period = this.halfHourPrediction
+    } else if (h == 1) {
+      period = this.oneHourPrediction
+    } else if (h == 2) {
+      period = this.twoHoursPrediction
     }
 
+    for (const i of period) {
+      const color = this.paintCaqi(i.caqi)
+      if (color != null) {
+        const cornerOne = L.latLng(i.lat, i.lon)
+        const cornerTwo = L.latLng(i.lat + step, i.lon + step)
+        const bounds= L.latLngBounds(cornerOne, cornerTwo)
+        const icon = L.rectangle(bounds,{
+          fillColor: `rgb(${color[0]}, ${color[1]}, ${color[2]})`,
+          fillOpacity: 0.7,
+          stroke: false
+        }).addTo(this.predictionLayer);
+      }
+    }
+  }
 
   private createCaqiIcon(caqi: number): L.DivIcon {
-    if (caqi < 25) {
+
+    const color = this.paintCaqi(caqi)
+
+    if (!color) {
       return L.divIcon({
-        className: 'full-markes',
-        html:`
-        <div style="
-        background-color: #4DFAC6;
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        border: 3px solid #42D6AA;
-        opacity: 0.9;">`
-      })
-    } else if (caqi >=25 && caqi <50) {
-      return L.divIcon({
-        className: 'full-markes',
-        html:`
-        <div style="
-        background-color: #4DDE57;
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        border: 3px solid #2DBC35;
-        opacity: 0.9;">`
-      })
-    } else if (caqi >=50 && caqi <75) {
-      return L.divIcon({
-        className: 'full-markes',
-        html: `
-        <div style="
-        background-color: #C8E64E;
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        border: 3px solid #A8C62E;
-        opacity: 0.9;">`
-      })
-    } else if (caqi >=75 && caqi <100) {
-      return L.divIcon({
-        className: 'full-markes',
-        html: `
-        <div style="
-        background-color: #E07444;
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        border: 3px solid #B05422;
-        opacity: 0.9;">`
+      className: 'full-markes',
+      html: `
+      <div style="
+      background-color: #333333);
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 3px solid #444444;
+      opacity: 0.9;">`
       })
     }
-    else {
-      return L.divIcon({
-        className: 'full-markes',
-        html:`
-        <div style="
-        background-color: #ff4444;
-        width: 27px;
-        height: 27px;
-        border-radius: 50%;
-        border: 3px solid #ee3333;
-        opacity: 0.9;">`
-      })
-    }
+
+    const borderColor = [Math.max(color[0] - 20, 0), Math.max(color[1] - 20, 0), Math.max(color[2] - 20, 0)];
+    return L.divIcon({
+      className: 'full-markes',
+      html: `
+      <div style="
+      background-color: rgb(${color[0]}, ${color[1]}, ${color[2]});
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 3px solid rgb(${borderColor[0]}, ${borderColor[1]}, ${borderColor[2]});
+      opacity: 0.9;">`
+    })
   }
 
   private paintCaqi(caqi: number) {
     let hop = 0;
     let intensivity = 0;
     const caqiLevels = [
-      { v: 0,   c: [18, 200, 182] },
+      { v: 0,   c: [18, 200, 225] },
       { v: 25,  c: [74, 255, 82] },
-      { v: 50,  c: [249, 244, 48] },
+      { v: 50,  c: [255, 255, 0] },
       { v: 75,  c: [255, 135, 48] },
-      { v: 100, c: [255, 49, 20] }]
+      { v: 100, c: [255, 49, 100] },
+      { v: Infinity,  c: [255, 49, 100] }]
 
     for (hop; hop < caqiLevels.length; hop++) {
       if (caqi >= caqiLevels[hop].v && caqi < caqiLevels[hop + 1].v) {
@@ -583,7 +754,6 @@ export class Map implements OnInit {
         const g = Math.round(caqiLevels[hop].c[1] + (caqiLevels[hop + 1].c[1] - caqiLevels[hop].c[1]) * intensivity);
         const b = Math.round(caqiLevels[hop].c[2] + (caqiLevels[hop + 1].c[2] - caqiLevels[hop].c[2]) * intensivity);
         return ([r, g, b])
-
       }
     }
     return null;
@@ -676,8 +846,6 @@ export class Map implements OnInit {
           border: 3px solid #ddccdd;
           opacity: 0.8;
         "></div>`,
-      // iconSize: [16, 16],
-      // iconAnchor: [8, 8],
     });
   }
 
@@ -694,7 +862,7 @@ export class Map implements OnInit {
       opacity: 0.8;">`
     })
   }
-  private createAQIcon(isHigh: boolean): L.DivIcon {
+  private createopenAQIcon(isHigh: boolean): L.DivIcon {
     return L.divIcon({
       className: "AQ-marker",
       html:
@@ -709,17 +877,8 @@ export class Map implements OnInit {
       iconSize: [14, 14],
       iconAnchor: [7, 7],
     });
-    // return L.icon({
-    //   iconUrl:
-    //     'https://leafletjs.com/examples/custom-icons/leaf-red.png',
-    //     // : 'https://leafletjs.com/examples/custom-icons/leaf-green.png',
-    //   iconSize: [38, 95],
-    //   iconAnchor: [22, 94],
-    //   shadowUrl: 'https://leafletjs.com/examples/custom-icons/leaf-shadow.png',
-    //   shadowSize: [50, 64],
-    //   shadowAnchor: [4, 62],
-    // });
   }
+
   private createGiosIcon(): L.DivIcon {
     return L.divIcon({
       className: "gios-marker",
@@ -772,35 +931,9 @@ export class Map implements OnInit {
     `;
   }
 
-  async loadMeasurements(point: any) {
-    try {
-      let url = "";
-
-      if (point.source.includes("openaq")) {
-        url = `http://localhost:3000/api/openaq/measurements?id=${point.id}`;
-      } // else if (point.source === "aqicn") {
-      //   url = `/api/aqicn/measurements?lat=${point.lat}&lon=${point.lon}`;
-      // } else if (point.source === "gios") {
-      //   url = `/api/gios/measurements?id=${point.id}`;
-      // }
-      else {
-        this.measurements = [];
-        this.stationTitle = "No measurements available";
-        return;
-      }
-
-      const resp = await fetch(url);
-      const data = await resp.json();
-      this.measurements = data;
-      this.stationTitle = point.name || point.source || "Station";
-
-    } catch (err) {
-      console.error("Load measurement error:", err);
-    }
-  }
   private checkTime(time: string) {
     const ageOfData = Date.now() - new Date(time).getTime();
-    return ageOfData < 60 * 60 * 1000;
+    return ageOfData < 120 * 60 * 1000;
   }
 }
 
