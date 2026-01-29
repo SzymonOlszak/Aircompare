@@ -51,10 +51,10 @@
   <div id="map"></div>
   <div class="buttons-container">
     <div class="buttons">
-      <button class='measurements-visibility-button' (click)="toggleView()">
+      <button class='measurements-visibility-button' [class.active]="viewMode == 'caqi'" (click)="toggleView()">
         {{ viewMode === 'sources' ? 'Show CAQI' : 'Show source' }}
       </button>
-      <button class='measurements-visibility-button' (click)="interpolationView()">
+      <button class='measurements-visibility-button' [class.active]="interpolationViewMode == 'on'" (click)="interpolationView()">
         {{ interpolationViewMode === 'off' ? 'Show interpolation' : 'Turn off interpolation' }}
       </button>
       <div class="prediction-container">

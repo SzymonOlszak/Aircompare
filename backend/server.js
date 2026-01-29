@@ -340,7 +340,7 @@ app.get("/api/aqicn", async (req, res) => {
       const data = await response.json();
 
       const iaqi = data.data.iaqi || {};
-      let pm25 = 0;
+      let pm25 = null;
 
       if (iaqi.pm25?.v && iaqi.pm10?.v) {
         if (iaqi.pm25.v !== parseFloat(station.aqi) && iaqi.pm25.v < iaqi.pm10.v * 1.3) {
@@ -351,10 +351,10 @@ app.get("/api/aqicn", async (req, res) => {
       return {
         ...station,
         measurements: {
-          co: iaqi.co?.v ?? 0,
-          no2: iaqi.no2?.v ?? 0,
-          o3: iaqi.o3?.v ?? 0,
-          pm10: iaqi.pm10?.v ?? 0,
+          co: iaqi.co?.v ?? null,
+          no2: iaqi.no2?.v ?? null,
+          o3: iaqi.o3?.v ?? null,
+          pm10: iaqi.pm10?.v ?? null,
           pm25: pm25,
         }
       }

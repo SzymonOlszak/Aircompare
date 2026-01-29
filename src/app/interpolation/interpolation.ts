@@ -16,15 +16,18 @@ export function inversedWeightedInterpolation(allMarkers: any[], lat: number, lo
   const p: number = 3;
   let numerator = 0;
   let denominator = 0;
+  ;
   // const ranges = [3000, 10000, 20000]
   // for (const maxRange in ranges) {
     for (const m of allMarkers) {
       const d = haversine(lat, lon, m.lat, m.lon);
-      // if (d > ranges[maxRange]) {continue}
-        const r = Math.sqrt(d * d + s * s);
-        const w = 1 / Math.pow(r, p);
-        numerator += m.pollutants?.[key] * w;
+      const h = 9000
+      const r = Math.sqrt(d * d + s * s);
+      const GWR = Math.exp((-1) * (d / (h * Math.sqrt(2))) ** 2);
+      const w = GWR / Math.pow(r, p);
+      numerator += m.pollutants?.[key] * w;
         denominator += w;
+
     }
     if (numerator !== 0 && denominator !== 0) {
       return numerator/denominator

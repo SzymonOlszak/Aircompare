@@ -59,7 +59,7 @@ async function fetchAirlyStations() {
   }
 }
 fetchGiosStations()
-fetchOpenAQSensors()
+// fetchOpenAQSensors()
 
 async function fetchOpenAQSensors () {
   const opAQRadius = 20000;
@@ -144,8 +144,9 @@ async function fetchGiosStations() {
       await (sleep(30000))
     }
 
+    const identificators = [1006, 19, 259, 452, 662, 685, 1130, 395]
     const giosCoordinates = allStations
-      .filter(s => Number(s["Identyfikator miasta"]) === 1006)
+      .filter((s => identificators.includes(Number(s["Identyfikator miasta"]))))
       .map(s => ({
         id: s["Identyfikator stacji"],
         name: s["Nazwa stacji"],

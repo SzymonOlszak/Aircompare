@@ -3,7 +3,9 @@ export function runAdvectionDiffusion(grid: number [][], steps: number, u: numbe
   const x = grid[0].length;
 
   let current = grid
-
+  let t30!: number[][]
+  let t60!: number[][]
+  let t120: number[][]
   for (let t = 0; t < steps; t++) {
     const next = Array.from({ length: y }, () => Array(x).fill(0));
 
@@ -14,8 +16,15 @@ export function runAdvectionDiffusion(grid: number [][], steps: number, u: numbe
       }
     applyBoundsConditions(v, u, next, current, x, y);
     current = next;
+    if (t == Math.floor(steps / 4)) {
+      t30 = current
+    }
+    else if (t == Math.floor(steps / 2)) {
+      t60 = current
+    }
   }
-  return current;
+  t120 = current
+  return {t30, t60, t120};
 }
 
 

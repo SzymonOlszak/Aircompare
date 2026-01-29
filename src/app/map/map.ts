@@ -28,6 +28,10 @@ export class Map implements OnInit {
     sources: string[];
     pollutants: any;
   }[] = [];
+  private allMarkers: {
+    marker: L.Marker;
+    sources: string[];
+  }[] = []
 
   public windData?: {
     direction: number,
@@ -71,18 +75,12 @@ export class Map implements OnInit {
     lon: number,
     caqi: number}[] = []
 
-  public predictionViewStatus: 0.5 | 1 | 2 | null = null;
-  //warstwy
   private caqiLayer = L.layerGroup();
   private interpolationLayer = L.layerGroup();
   private predictionLayer = L.layerGroup();
-
   private allSourcesLayer = L.layerGroup();
-  private allMarkers: {
-    marker: L.Marker;
-    sources: string[];
-  }[] = []
 
+  public predictionViewStatus: 0.5 | 1 | 2 | null = null;
   private chosenSources: Record<string, boolean> = {
     gios: true,
     openaq: true,
@@ -100,7 +98,6 @@ export class Map implements OnInit {
 
   async ngOnInit(): Promise <void> {
     this.runMap();
-    console.log('MAP BEFORE addLayer', this.map);
 
     this.addLayer();
 
@@ -117,45 +114,13 @@ export class Map implements OnInit {
     if (this.windData) {
       this.windVector = getWindVector(this.windData.direction, this.windData.speed)
     }
-    console.log("WIAAAAATER", this.windVector)
+    console.log("WIATER", this.windVector)
 
-    const bounds = this.map.getBounds();
     const minLat = 51.95;
     const maxLat = 52.5;
     const minLon = 20.1;
     const maxLon = 21.8;
-    // const bounds = this.map.getBounds();
-    // const minLat = bounds.getSouth();
-    // const maxLat = bounds.getNorth();
-    // const minLon = bounds.getWest();
-    // const maxLon = bounds.getEast();
     const step = 0.01;
-    let maxWind = 0;
-    // const steps = 1000;
-    if (this.windVector) maxWind = Math.max(Math.abs(this.windVector.u), Math.abs(this.windVector.v)) * 1000 / 3600
-
-    const latAngle = (minLat + maxLat) * 0.5 * Math.PI / 180
-
-    const hy = 1110;
-    const hx = hy * Math.cos(latAngle)
-    const kappa = 0.05
-    const u = this.windVector?.u ?? 0
-    const v = this.windVector?.v ?? 0
-    // const dt = 0.5 * h / maxWind;  //bo dt nie może być większy niż czas przeskoku 1 kratki wiatru
-    const dtAdvX = hx / Math.abs(u)
-    const dtAdvY = hy / Math.abs(v)
-    const dtAdvection = 0.5 * Math.min(dtAdvX, dtAdvY)
-
-    const dtDiffusion = 0.25 * (hx*hx * hy*hy) / (kappa * (hx*hx + hy*hy))
-
-    const dt = Math.min(dtAdvection, dtDiffusion)
-
-    const steps30 = Math.round((0.5 * 3600) / dt);
-    const steps60 = Math.round((1 * 3600) / dt);
-    const steps120 = Math.round((2 * 3600) / dt);
-
-    const predictionHours = 2;
-    const steps = Math.round((predictionHours * 3600) / dt);
     const y = Math.floor((maxLat - minLat) / step);      //DLA OSI Y, ile przeskoków, LONGITUDE
     const x = Math.floor((maxLon - minLon) / step);      //DLA OSI X, ile przeskoków, LATITUDE
     this.predictionGrids = {
@@ -164,66 +129,20 @@ export class Map implements OnInit {
       no2:  Array.from({ length: y }, () => Array(x).fill(0)),
       o3:   Array.from({ length: y }, () => Array(x).fill(0)),
     };
+    this.runInterpolation(x,y, minLat, minLon, step)
+    this.runPrediction(x,y, minLat, maxLat, minLon, step)
 
-                //INTERPOLACJA
-    for (let i = 0; i < y; i++) {   //LONGITUDE
-      for (let j = 0; j < x; j++) {  //LATITUDE
-        const lat = minLat + (i + 0.5) * step;
-        const lon = minLon + (j + 0.5) * step;
+    // const bounds = this.map.getBounds();
+    // const bounds = this.map.getBounds();
+    // const minLat = bounds.getSouth();
+    // const maxLat = bounds.getNorth();
+    // const minLon = bounds.getWest();
+    // const maxLon = bounds.getEast();
 
-        const pm10 = inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "pm10") ?? 0
-        const pm25 = inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "pm25") ?? 0
-        const no2 = inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "no2") ?? 0
-        const o3 = inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "o3") ?? 0
+    let maxWind = 0;
+    // const steps = 1000;
 
-        const caqi: number = Math.max(calculateCAQI(pm10, PM10Breakpoints) ?? 0, calculateCAQI(pm25, PM25Breakpoints) ?? 0, calculateCAQI(no2, NO2Breakpoints) ?? 0, calculateCAQI(o3, O3Breakpoints) ?? 0)
 
-        if (caqi) {
-          this.predictionGrids.no2[i][j] = no2
-          this.predictionGrids.pm10[i][j] = pm10
-          this.predictionGrids.o3[i][j] = o3
-          this.predictionGrids.pm25[i][j] = pm25
-          this.grid.push({lat, lon, caqi: Math.round(caqi * 10) / 10})
-        }
-      }
-    }
-
-    for (const steps of [steps30, steps60, steps120]) {
-      for (const pollutant of ['pm10','pm25','no2','o3'] as const) {
-        this.predictionGrids[pollutant] = runAdvectionDiffusion(this.predictionGrids[pollutant], steps, u, v, dt, hx, hy, kappa);
-      }
-
-      for (let i = 0; i < y; i++) {
-        for (let j = 0; j < x; j++) {
-          const caqi = calculateCAQIFromCell({
-            pm10: this.predictionGrids.pm10[i][j],
-            pm25: this.predictionGrids.pm25[i][j],
-            no2: this.predictionGrids.no2[i][j],
-            o3: this.predictionGrids.o3[i][j],
-          });
-
-          if (steps==steps30) {
-            this.halfHourPrediction.push({
-              lat: minLat + i * step,
-              lon: minLon + j * step,
-              caqi: caqi
-            })
-          } else if (steps == steps60) {
-            this.oneHourPrediction.push({
-              lat: minLat + i * step,
-              lon: minLon + j * step,
-              caqi: caqi
-            })
-          } else if (steps == steps120) {
-            this.twoHoursPrediction.push({
-              lat: minLat + i * step,
-              lon: minLon + j * step,
-              caqi: caqi
-            })
-          }
-        }
-      }
-    }
 
     console.log("TU JEST GRID", this.grid);
     console.log("TU DO PREDYKCJI?", this.predictionGrid)
@@ -255,6 +174,138 @@ export class Map implements OnInit {
     this.allSourcesLayer.addTo(this.map);
   }
 
+  private runInterpolation(x:number, y:number, minLat:number, minLon:number, step:number): void {
+
+    for (let i = 0; i < y; i++) {   //LONGITUDE
+      for (let j = 0; j < x; j++) {  //LATITUDE
+        const lat = minLat + (i + 0.5) * step;
+        const lon = minLon + (j + 0.5) * step;
+
+        const pm10: number | null= inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "pm10")
+        const pm25:  number | null = inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "pm25")
+        const no2: number | null = inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "no2")
+        const o3:  number | null = inversedWeightedInterpolation(this.caqiMarkers, lat, lon, "o3")
+        const potentialCAQI: number[] = []
+
+        if (pm10 != null) {
+          const v = calculateCAQI(pm10, PM10Breakpoints);
+          if (v != null) potentialCAQI.push(v);
+        }
+
+        if (pm25 != null) {
+          const v = calculateCAQI(pm25, PM25Breakpoints);
+          if (v != null) potentialCAQI.push(v);
+        }
+
+        if (no2 != null) {
+          const v = calculateCAQI(no2, NO2Breakpoints);
+          if (v != null) potentialCAQI.push(v);
+        }
+
+        if (o3 != null) {
+          const v = calculateCAQI(o3, O3Breakpoints);
+          if (v != null) potentialCAQI.push(v);
+        }
+        const caqi: number = Math.max(...potentialCAQI)
+        if (typeof no2 == 'number' ) {
+          this.predictionGrids.no2[i][j] = no2
+        }
+        if (typeof pm10 == 'number' ) {
+          this.predictionGrids.pm10[i][j] = pm10
+        }
+        if (typeof o3 == 'number' ) {
+          this.predictionGrids.o3[i][j] = o3
+        }
+        if (typeof pm25 == 'number' ) {
+          this.predictionGrids.pm25[i][j] = pm25
+        }
+
+        if (caqi !==null) {
+          this.grid.push({lat, lon, caqi: Math.round(caqi * 10) / 10})
+        }
+
+      }
+    }
+  }
+
+  private runPrediction(x:number, y:number, minLat:number, maxLat:number, minLon:number, step:number): void {
+    const latAngle = (minLat + maxLat) * 0.5 * Math.PI / 180
+
+    const hy = 1110;
+    const hx = hy * Math.cos(latAngle)
+    const kappa = 0.05
+    const u = this.windVector?.u ?? 0
+    const v = this.windVector?.v ?? 0
+    // const dt = 0.5 * h / maxWind;  //bo dt nie może być większy niż czas przeskoku 1 kratki wiatru
+
+    const dtAdvX =  u !== 0 ? hx / Math.abs(u) : Infinity;
+    const dtAdvY = v !== 0 ? hy / Math.abs(v) : Infinity;
+    const dtAdvection = 0.5 * Math.min(dtAdvX, dtAdvY)
+
+    const dtDiffusion = 0.25 * (hx*hx * hy*hy) / (kappa * (hx*hx + hy*hy))
+
+    const dt = Math.min(dtAdvection, dtDiffusion)
+
+    const steps30 = Math.round((0.5 * 3600) / dt);
+    const steps60 = Math.round((1 * 3600) / dt);
+    const steps120 = Math.round((2 * 3600) / dt);
+
+    // const predictionHours = 2;
+    // const steps = Math.round((predictionHours * 3600) / dt);
+
+
+      // const grid = this.predictionGrids
+      // for (const pollutant of ['pm10','pm25','no2','o3'] as const) {
+      //    grid[pollutant] = runAdvectionDiffusion(grid[pollutant], steps, u, v, dt, hx, hy, kappa);
+      // }
+    const results = {
+      pm10: runAdvectionDiffusion(this.predictionGrids.pm10, steps120, u, v, dt, hx, hy, kappa),
+      pm25: runAdvectionDiffusion(this.predictionGrids.pm25, steps120, u, v, dt, hx, hy, kappa),
+      no2: runAdvectionDiffusion(this.predictionGrids.no2,  steps120, u, v, dt, hx, hy, kappa),
+      o3: runAdvectionDiffusion(this.predictionGrids.o3,   steps120, u, v, dt, hx, hy, kappa),
+    };
+
+    for (let i = 0; i < y; i++) {
+      for (let j = 0; j < x; j++) {
+        const caqi30 = calculateCAQIFromCell({
+          pm10: results.pm10.t30[i][j],
+          pm25: results.pm25.t30[i][j],
+          no2: results.no2.t30[i][j],
+          o3: results.o3.t30[i][j],
+        });
+        const caqi60 = calculateCAQIFromCell({
+          pm10: results.pm10.t60[i][j],
+          pm25: results.pm25.t60[i][j],
+          no2: results.no2.t60[i][j],
+          o3: results.o3.t60[i][j],
+        });
+        const caqi120 = calculateCAQIFromCell({
+          pm10: results.pm10.t120[i][j],
+          pm25: results.pm25.t120[i][j],
+          no2: results.no2.t120[i][j],
+          o3: results.o3.t120[i][j],
+        });
+
+        this.halfHourPrediction.push({
+          lat: minLat + i * step,
+          lon: minLon + j * step,
+          caqi: caqi30
+        })
+
+        this.oneHourPrediction.push({
+          lat: minLat + i * step,
+          lon: minLon + j * step,
+          caqi: caqi60
+        })
+
+        this.twoHoursPrediction.push({
+          lat: minLat + i * step,
+          lon: minLon + j * step,
+          caqi: caqi120
+        })
+      }
+    }
+  }
   toggleView(): void {
     if (this.viewMode === 'sources') {
       this.map.removeLayer(this.allSourcesLayer);
@@ -454,7 +505,7 @@ export class Map implements OnInit {
     for (const loc of this.allData) {
       if (!loc.lat || !loc.lon) continue;
 
-      const key = `${loc.lat.toFixed(4)},${loc.lon.toFixed(4)}`;
+      const key = `${loc.lat.toFixed(3)},${loc.lon.toFixed(3)}`;
       if (!grouped[key]) {
         grouped[key] = []
       }
@@ -515,7 +566,6 @@ export class Map implements OnInit {
                     })
                   }
                 }
-
               }
             }
           }
@@ -543,10 +593,7 @@ export class Map implements OnInit {
             if (pollutants.pm10 == null || pollutants.pm10 < values.pm10) {
               pollutants.pm10 = values.pm10 ?? pollutants.pm10;
             }
-            // if ((pollutants.pm25 == null && values.pm25 < values.pm10 * 1.3) ||
-            //   (pollutants.pm25 != null && pollutants.pm25 < values.pm25 && values.pm25 < values.pm10 * 1.3)) {
-            //   pollutants.pm25 = values.pm25 ?? pollutants.pm25;
-            // }
+
             if (pollutants.pm25 == null ||  pollutants.pm25 < values.pm25) {
               pollutants.pm25 = values.pm25 ?? pollutants.pm25;
             }
@@ -597,6 +644,8 @@ export class Map implements OnInit {
         icon = this.createMixedIcon('#00c853', '#2196f3');
       } else if (hasOpenAQ && hasAQICN) {
         icon = this.createMixedIcon('#2196f3', '#ee22ee');
+      } else if (hasGios && hasAQICN) {
+        icon = this.createMixedIcon('#00c853', '#ee22ee');
       } else if (hasAirly) {
         icon = this.createAirlyIcon();
       } else if (hasGios) {
@@ -622,7 +671,6 @@ export class Map implements OnInit {
       //   const layer = this.sourceLayers[s];
       //   if (layer) marker.addTo(layer);
       // }
-
     }
   }
   private drawMarkers(): void {
@@ -740,7 +788,7 @@ export class Map implements OnInit {
     let hop = 0;
     let intensivity = 0;
     const caqiLevels = [
-      { v: 0,   c: [18, 200, 225] },
+      { v: 0,   c: [18, 220, 225] },
       { v: 25,  c: [74, 255, 82] },
       { v: 50,  c: [255, 255, 0] },
       { v: 75,  c: [255, 135, 48] },
@@ -932,6 +980,7 @@ export class Map implements OnInit {
   }
 
   private checkTime(time: string) {
+    if (!time) return false;
     const ageOfData = Date.now() - new Date(time).getTime();
     return ageOfData < 120 * 60 * 1000;
   }
