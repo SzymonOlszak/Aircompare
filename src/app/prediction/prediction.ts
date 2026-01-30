@@ -1,19 +1,20 @@
 export function runAdvectionDiffusion(grid: number [][], steps: number, u: number, v: number, dt: number, hx: number, hy: number, kappa: number) {
-  const y = grid.length;
-  const x = grid[0].length;
-
   let current = grid
   let t30!: number[][]
   let t60!: number[][]
   let t120: number[][]
+
+  const y = grid.length;
+  const x = grid[0].length;
+
   for (let t = 0; t < steps; t++) {
     const next = Array.from({ length: y }, () => Array(x).fill(0));
 
-      for (let i = 1; i < y - 1; i++) {
-        for (let j = 1; j < x - 1; j++) {
-          next[i][j] = diffusionAdvection(current, i, j, u, v, dt, hx, hy, kappa);
-        }
+    for (let i = 1; i < y - 1; i++) {
+      for (let j = 1; j < x - 1; j++) {
+        next[i][j] = diffusionAdvection(current, i, j, u, v, dt, hx, hy, kappa);
       }
+    }
     applyBoundsConditions(v, u, next, current, x, y);
     current = next;
     if (t == Math.floor(steps / 4)) {
