@@ -35,12 +35,12 @@ export function diffusionAdvection(grid: number[][],i:number, j:number, u:number
       //DLA X I Y
       let dCdx = 0
       let dCdy = 0
-      if (u > 0) {  //E-W
+      if (u > 0) {  //E-W - wschód
         dCdx = (current - grid[i][j-1]) / (hx);
       } else {
         dCdx = (grid[i][j+1] - current) / (hx);
       }
-      if (v > 0) {  //S-N
+      if (v > 0) {  //S-N   - północ
         dCdy = (current - grid[i-1][j]) / (hy);
       } else {
         dCdy = (grid[i+1][j] - current ) / (hy);
@@ -56,30 +56,30 @@ export function diffusionAdvection(grid: number[][],i:number, j:number, u:number
 
 function applyBoundsConditions(v: number, u: number, next: number [][], current: number [][], x: number, y: number) {
   if (v > 0) {   ///WIATR NA PÓŁNOC
-        for (let j = 0; j < x; j++) {
-          next[y - 1][j]     = next[y - 2][j];
-          next[0][j] = current[0][j];
-        }
-      } else {   //WIATR NA POŁUDNIE
-        for (let j = 0; j < x; j++) {
-          next[0][j]     = next[1][j];
-          next[y - 1][j] = current[y - 1][j];
-        }
-      }
-      if (u > 0) {   //WIATR NA WSCHÓD
-        for (let i = 0; i < y; i++) {
-          next[i][x - 1] = next[i][x - 2];
-          next[i][0]     = current[i][0]; // inflow
-        }
-      } else {   //WIATR NA ZACHÓD
-        for (let i = 0; i < y; i++) {
-          next[i][0] = next[i][1];
-          next[i][x - 1] = current[i][x - 1];
-        }
-      }
+    for (let j = 0; j < x; j++) {
+      next[y - 1][j]     = next[y - 2][j];
+      next[0][j] = current[0][j];
+    }
+  } else {   //WIATR NA POŁUDNIE
+    for (let j = 0; j < x; j++) {
+      next[0][j]     = next[1][j];
+      next[y - 1][j] = current[y - 1][j];
+    }
+  }
+  if (u > 0) {   //WIATR NA WSCHÓD
+    for (let i = 0; i < y; i++) {
+      next[i][x - 1] = next[i][x - 2];
+      next[i][0]     = current[i][0];
+    }
+  } else {   //WIATR NA ZACHÓD
+    for (let i = 0; i < y; i++) {
+      next[i][0] = next[i][1];
+      next[i][x - 1] = current[i][x - 1];
+    }
+  }
 }
 export function getWindVector(direction: number, speed: number) {
-  const radians = direction * Math.PI / 180;
+  const radians = (270 - direction) * Math.PI / 180;
   return {
     u: speed * Math.cos(radians),
     v: speed * Math.sin(radians)

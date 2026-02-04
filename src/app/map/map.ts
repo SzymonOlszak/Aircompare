@@ -123,6 +123,7 @@ export class Map implements OnInit {
     const step = 0.01;
     const y = Math.floor((maxLat - minLat) / step);      //DLA OSI Y, ile przeskoków, LONGITUDE
     const x = Math.floor((maxLon - minLon) / step);      //DLA OSI X, ile przeskoków, LATITUDE
+    console.log("skok x:", x, "skok y:", y)
     this.predictionGrids = {
       pm10: Array.from({ length: y }, () => Array(x).fill(0)),
       pm25: Array.from({ length: y }, () => Array(x).fill(0)),
@@ -207,18 +208,49 @@ export class Map implements OnInit {
           if (vO3 != null) potentialCAQI.push(vO3);
         // }
         const caqi: number = Math.max(...potentialCAQI)
+        // if (i == y/2 + 2 && j == Math.round(x/2 + 2)) { //centrum góra
+        //   console.log("centrum góra", i, j)
+        //   this.predictionGrids.no2[i][j] = 200
+        //   this.predictionGrids.pm10[i][j] = 200
+        //   this.predictionGrids.o3[i][j] = 200
+        //   this.predictionGrids.pm25[i][j] = 200
+        // } else if (i == (y/2) && j == Math.round(x/2) + 23) {  //wschód
+        //   console.log("wschód", i, j)
+        //   this.predictionGrids.no2[i][j] = 200
+        //   this.predictionGrids.pm10[i][j] = 200
+        //   this.predictionGrids.o3[i][j] = 200
+        //   this.predictionGrids.pm25[i][j] = 200
+        // } else if (i == (y/2 + 13) && j == Math.round(x/2) - 20) { //odludzie
+        //   console.log("odludzie", i, j)
+        //   this.predictionGrids.no2[i][j] = 200
+        //   this.predictionGrids.pm10[i][j] = 200
+        //   this.predictionGrids.o3[i][j] = 200
+        //   this.predictionGrids.pm25[i][j] = 200
+        // } else if (i == (y/2 - 2) && j == Math.round(x/2) + 5) { //dół centrum
+        //   console.log("centrum dół", i, j)
+        //   this.predictionGrids.no2[i][j] = 200
+        //   this.predictionGrids.pm10[i][j] = 200
+        //   this.predictionGrids.o3[i][j] = 200
+        //   this.predictionGrids.pm25[i][j] = 200
+        // } else if (i == (y/2 - 10) && j == Math.round(x/2) + 6) { //południe
+        //   console.log("południe", i,j)
+        //   this.predictionGrids.no2[i][j] = 200
+        //   this.predictionGrids.pm10[i][j] = 200
+        //   this.predictionGrids.o3[i][j] = 200
+        //   this.predictionGrids.pm25[i][j] = 200
+        // }
 
-        this.predictionGrids.no2[i][j] = no2
-        this.predictionGrids.pm10[i][j] = pm10
-        this.predictionGrids.o3[i][j] = o3
-        this.predictionGrids.pm25[i][j] = pm25
+        // else {
+          this.predictionGrids.no2[i][j] = no2
+          this.predictionGrids.pm10[i][j] = pm10
+          this.predictionGrids.o3[i][j] = o3
+          this.predictionGrids.pm25[i][j] = pm25
+        // }
         // if (typeof pm25 == 'number' ) {
 
         // }
 
         this.grid.push({lat, lon, caqi: Math.round(caqi * 10) / 10})
-
-
       }
     }
   }
@@ -290,6 +322,130 @@ export class Map implements OnInit {
         })
       }
     }
+    //aktualne
+    console.log("aktualny PUNKT [17][91]:", {
+      pm10: Math.round(this.predictionGrids.pm10[17][91]),
+      pm25: Math.round(this.predictionGrids.pm25[17][91]),
+      no2:  Math.round(this.predictionGrids.no2[17][91]),
+      o3:   Math.round(this.predictionGrids.o3[17][91]),
+    });
+    console.log("aktualny PUNKT [27][108]:", {
+      pm10: Math.round(this.predictionGrids.pm10[27][108]),
+      pm25: Math.round(this.predictionGrids.pm25[27][108]),
+      no2:  Math.round(this.predictionGrids.no2[27][108]),
+      o3:   Math.round(this.predictionGrids.o3[27][108]),
+    });
+    console.log("aktualny PUNKT [25][90]:", {
+      pm10: Math.round(this.predictionGrids.pm10[25][90]),
+      pm25: Math.round(this.predictionGrids.pm25[25][90]),
+      no2:  Math.round(this.predictionGrids.no2[25][90]),
+      o3:   Math.round(this.predictionGrids.o3[25][90]),
+    });
+    console.log("aktualny PUNKT [40][65]:", {
+      pm10: Math.round(this.predictionGrids.pm10[27][108]),
+      pm25: Math.round(this.predictionGrids.pm25[27][108]),
+      no2:  Math.round(this.predictionGrids.no2[27][108]),
+      o3:   Math.round(this.predictionGrids.o3[27][108]),
+    });
+    console.log("aktualny PUNKT [29][87]:", {
+      pm10: Math.round(this.predictionGrids.pm10[29][87]),
+      pm25: Math.round(this.predictionGrids.pm25[29][87]),
+      no2:  Math.round(this.predictionGrids.no2[29][87]),
+      o3:   Math.round(this.predictionGrids.o3[29][87]),
+    });
+    //30minut
+    console.log("predykcja30 PUNKT [17][91]:", {
+      pm10: Math.round(results.pm10.t30[17][91]),
+      pm25: Math.round(results.pm25.t30[17][91]),
+      no2:  Math.round(results.no2.t30[17][91]),
+      o3:   Math.round(results.o3.t30[17][91]),
+    });
+    console.log("predykcja30 [27][108]:", {
+      pm10: Math.round(results.pm10.t30[27][108]),
+      pm25: Math.round(results.pm25.t30[27][108]),
+      no2:  Math.round(results.no2.t30[27][108]),
+      o3:   Math.round(results.o3.t30[27][108]),
+    });
+    console.log("predykcja30 [25][90]:", {
+      pm10: Math.round(results.pm10.t30[25][90]),
+      pm25: Math.round(results.pm25.t30[25][90]),
+      no2:  Math.round(results.no2.t30[25][90]),
+      o3:   Math.round(results.o3.t30[25][90]),
+    });
+    console.log("predykcja30 [40][65]:", {
+      pm10: Math.round(results.pm10.t30[40][65]),
+      pm25: Math.round(results.pm25.t30[40][65]),
+      no2:  Math.round(results.no2.t30[40][65]),
+      o3:   Math.round(results.o3.t30[40][65]),
+    });
+    console.log("predykcja30 [29][87]:", {
+      pm10: Math.round(results.pm10.t30[29][87]),
+      pm25: Math.round(results.pm25.t30[29][87]),
+      no2:  Math.round(results.no2.t30[29][87]),
+      o3:   Math.round(results.o3.t30[29][87]),
+    });
+    //60minut
+    console.log("predykcja1h [17][91]:", {
+      pm10: Math.round(results.pm10.t60[17][91]),
+      pm25: Math.round(results.pm25.t60[17][91]),
+      no2:  Math.round(results.no2.t60[17][91]),
+      o3:   Math.round(results.o3.t60[17][91]),
+    });
+    console.log("predykcja1h [27][108]:", {
+      pm10: Math.round(results.pm10.t60[27][108]),
+      pm25: Math.round(results.pm25.t60[27][108]),
+      no2:  Math.round(results.no2.t60[27][108]),
+      o3:   Math.round(results.o3.t60[27][108]),
+    });
+    console.log("predykcja1h [25][90]:", {
+      pm10: Math.round(results.pm10.t60[25][90]),
+      pm25: Math.round(results.pm25.t60[25][90]),
+      no2:  Math.round(results.no2.t60[25][90]),
+      o3:   Math.round(results.o3.t60[25][90]),
+    });
+    console.log("predykcja1h [40][65]:", {
+      pm10: Math.round(results.pm10.t60[40][65]),
+      pm25: Math.round(results.pm25.t60[40][65]),
+      no2:  Math.round(results.no2.t60[40][65]),
+      o3:   Math.round(results.o3.t60[40][65]),
+    });
+    console.log("predykcja1h [29][87]:", {
+      pm10: Math.round(results.pm10.t60[29][87]),
+      pm25: Math.round(results.pm25.t60[29][87]),
+      no2:  Math.round(results.no2.t60[29][87]),
+      o3:   Math.round(results.o3.t60[29][87]),
+    });
+    //120minut
+    console.log("predykcja2h [17][91]:", {
+      pm10: Math.round(results.pm10.t120[17][91]),
+      pm25: Math.round(results.pm25.t120[17][91]),
+      no2:  Math.round(results.no2.t120[17][91]),
+      o3:   Math.round(results.o3.t120[17][91]),
+    });
+    console.log("predykcja2h [27][108]:", {
+      pm10: Math.round(results.pm10.t120[27][108]),
+      pm25: Math.round(results.pm25.t120[27][108]),
+      no2:  Math.round(results.no2.t120[27][108]),
+      o3:   Math.round(results.o3.t120[27][108]),
+    });
+    console.log("predykcja2h [25][90]:", {
+      pm10: Math.round(results.pm10.t120[25][90]),
+      pm25: Math.round(results.pm25.t120[25][90]),
+      no2:  Math.round(results.no2.t120[25][90]),
+      o3:   Math.round(results.o3.t120[25][90]),
+    });
+    console.log("predykcja2h [40][65]:", {
+      pm10: Math.round(results.pm10.t120[40][65]),
+      pm25: Math.round(results.pm25.t120[40][65]),
+      no2:  Math.round(results.no2.t120[40][65]),
+      o3:   Math.round(results.o3.t120[40][65]),
+    });
+    console.log("predykcja2h [29][87]:", {
+      pm10: Math.round(results.pm10.t120[29][87]),
+      pm25: Math.round(results.pm25.t120[29][87]),
+      no2:  Math.round(results.no2.t120[29][87]),
+      o3:   Math.round(results.o3.t120[29][87]),
+    });
   }
   toggleView(): void {
     if (this.viewMode === 'sources') {
@@ -621,6 +777,8 @@ export class Map implements OnInit {
         icon = this.createMixedIconOfThree('#12ff77', '#ff1133', '#114499');
       } else if (hasGios && hasOpenAQ && hasIoT) {
         icon = this.createMixedIconOfThree('#12ff77', '#eebb33', '#114499')
+      } else if (hasGios && hasOpenAQ && hasAQICN) {
+        icon = this.createMixedIconOfThree('#12ff77', '#eebb33', '#ee22ee')
       } else if (hasAirly && hasGios) {
         icon = this.createMixedIcon('#ee0022', '#00c853');
       } else if (hasAirly && hasOpenAQ) {
