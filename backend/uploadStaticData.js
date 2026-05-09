@@ -3,18 +3,23 @@ import mysql from "mysql2/promise";
 
 const lat = 52.2297;
 const lng = 21.0122;
-const radius = 30;
-const apiKey = "f0TvSUUT3FrlEWD4jowv1TPXq51astfE";
-const maxResults = 30;
+
+
+fetchGiosStations()
+fetchOpenAQSensors()
+fetchAirlyStations()
 
 async function fetchAirlyStations() {
+  const airlyApiKey = "f0TvSUUT3FrlEWD4jowv1TPXq51astfE";
+  const radius = 30;
+  const maxResults = 30;
   try {
     const url = `https://airapi.airly.eu/v2/installations/nearest?lat=${lat}&lng=${lng}&maxDistanceKM=${radius}&maxResults=${maxResults}`;
     const response = await fetch(url, {
       headers: {
         method: "GET",
         Accept: "application/json",
-        apikey: apiKey,
+        apikey: airlyApiKey,
       },
     });
 
@@ -34,8 +39,8 @@ async function fetchAirlyStations() {
     });
 
     const insertQuery = `
-      REPLACE INTO airly_stations (locationId, name, lat, lon, city, street, origin)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      replace into airly_stations (locationId, name, lat, lon, city, street, origin)
+      values (?, ?, ?, ?, ?, ?, ?)
     `;
 
     for (const item of data) {
@@ -55,11 +60,9 @@ async function fetchAirlyStations() {
     await connection.end();
 
   } catch (err) {
-      console.error("Error downloading the data:", err);
+    console.error("Error downloading the data (Airly):", err);
   }
 }
-fetchGiosStations()
-// fetchOpenAQSensors()
 
 async function fetchOpenAQSensors () {
   const opAQRadius = 20000;
@@ -90,8 +93,8 @@ async function fetchOpenAQSensors () {
     });
 
     const insertQuery = `
-      REPLACE INTO openaq_sensors (sensorId, parameterName, displayName, unit, locationsId, name, lat, lon)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      replace into openaq_sensors (sensorId, parameterName, unit, locationsId, name, lat, lon)
+      values (?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     for (const loc of data.results || []) {
@@ -99,7 +102,6 @@ async function fetchOpenAQSensors () {
         await connection.execute(insertQuery, [
           sensor.id,
           sensor.parameter.name,
-          sensor.parameter.displayName,
           sensor.parameter.units,
           loc.id,
           loc.name,
@@ -112,7 +114,7 @@ async function fetchOpenAQSensors () {
      await connection.end();
 
   } catch (err) {
-    console.error("Error downloading the data:", err);
+    console.error("Error downloading the data (OpenAQ):", err);
   }
 }
 
@@ -134,7 +136,7 @@ async function fetchGiosStations() {
     for (let page = 0; page < totalPages; page++) {
       const response = await fetch(`${url}?page=${page}&size=${pageSize}`);
       if (!response.ok) {
-        throw new Error(`API error ${response.status}`);
+        throw new Error(`API error ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -165,29 +167,28 @@ async function fetchGiosStations() {
     });
 
     const insertQuery = `
-      REPLACE INTO gios_stations (
+      replace into gios_stations (
         station_id,
         name,
         lat,
         lon,
         city,
         street)
-      VALUES (?, ?, ?, ?, ?, ?)
+      values (?, ?, ?, ?, ?, ?)
     `;
 
     for (const loc of giosCoordinates || []) {
-        await connection.execute(insertQuery, [
-          loc.id,
-          loc.name || null,
-          loc.lat || null,
-          loc.lon || null,
-          loc.city || null,
-          loc.street || null
-        ]);
+      await connection.execute(insertQuery, [
+        loc.id,
+        loc.name,
+        loc.lat,
+        loc.lon,
+        loc.city,
+      ]);
     }
     await connection.end();
   } catch (err) {
-    console.error("Server error:", err);
+    console.error("Error downloading the data (gios):", err);
   }
 }
 
@@ -210,34 +211,6 @@ async function measurement() {
     }
     const DATA = await response.json()
     console.log(JSON.stringify(DATA, null, 2))
-  } catch (err) {
-    console.log(err)
-  }
-}
-// openaqTEST()
-// measurement()
-async function openaqTEST() {
-  const lat = 52.2297;
-  const lon = 21.0122;
-  const radius = 20000;
-  const apiKey = '67b897ddb5f0fbc65cdab9c01115fa763ca4ad5240292679988a951db098180b'
-  const url = `https://api.openaq.org/v3/locations?coordinates=${lat},${lon}&radius=${radius}&limit=100`;
-
-  try {
-
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-API-Key": apiKey,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log(data)
   } catch (err) {
     console.log(err)
   }

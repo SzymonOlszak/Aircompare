@@ -49,8 +49,8 @@ export function diffusionAdvection(grid: number[][],i:number, j:number, u:number
       const advection = -(u * dCdx + v * dCdy);
 
       const diffusion =
-        (grid[i+1][j] - 2*current + grid[i-1][j]) / hx**2 +
-        (grid[i][j+1] - 2*current + grid[i][j-1]) / hy**2;
+        (grid[i+1][j] - 2*current + grid[i-1][j]) / hy**2 +
+        (grid[i][j+1] - 2*current + grid[i][j-1]) / hx**2;
       return current + dt * (advection + kappa * diffusion);
 }
 

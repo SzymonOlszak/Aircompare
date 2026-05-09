@@ -1,7 +1,6 @@
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
-// import fs from "fs";
 import mysql from "mysql2/promise";
 
 const app = express();
@@ -18,7 +17,7 @@ app.get("/api/openaq", async (req, res) => {
 
   try {
     const [dbSensors] = await pool.query(
-      "SELECT sensorId, parameterName, displayName, unit, locationsId, lat, lon FROM openaq_sensors");
+      "select sensorId, parameterName, unit, locationsId, lat, lon from openaq_sensors");
 
     const uniqueLocations = [...new Set (dbSensors.map(s => Number(s.locationsId)))];
 
@@ -34,25 +33,25 @@ app.get("/api/openaq", async (req, res) => {
       });
 
       if (!latestResponse.ok) {
-        throw new Error(`API error: ${latestResponse.status}`);
+        throw new Error(`API error: ${latestResponse.status} ${response.statusText}}`);
       }
       const latestData = await latestResponse.json();
 
       const measurements = latestData.results.map(m => {
-        const sensor = (dbSensors.find(s =>
-          (s.sensorId) === Number(m.sensorsId) &&
-          Number(s.locationsId) === Number(m.locationsId)))
+        const sensor = (dbSensors.find(s => (s.sensorId) === Number(m.sensorsId) && Number(s.locationsId) === Number(m.locationsId)))
         return {
-          name: sensor?.parameterName,
+          name: sensor.parameterName,
           sensorId: m.sensorsId,
-          value: m.value,
-          unit: sensor?.unit,
+          value: Math.round(m.value * 100) / 100,
+          unit: sensor.unit,
           time: m.datetime.local
         }
       })
 
       const sensorsForLocation = dbSensors.filter(s => Number(s.locationsId) === locationId);
-      const {lat, lon, name} = sensorsForLocation[0];
+      const lat = sensorsForLocation[0].lat;
+      const lon = sensorsForLocation[0].lon;
+      const name =  sensorsForLocation[0].name;
 
       AQcoordinates.push({
         id: locationId,
@@ -78,7 +77,7 @@ app.get("/api/gios", async (req, res) => {
 
   try {
     [stations] = await pool.query(
-      "SELECT station_id, name, lat, lon, city, street FROM gios_stations"
+      "select station_id, name, lat, lon, city from gios_stations"
     );
 
     airCoordinates = stations.map((loc) => ({
@@ -132,7 +131,7 @@ app.get("/api/gios", async (req, res) => {
         }
 
       } catch (err) {
-        console.error(err);
+        console.error("Detail fetch error for station:", station.id, err);
         return {
           ...station,
           measurements: [],
@@ -161,7 +160,7 @@ app.get("/api/airly", async (req, res) => {
 
   try {
     [stations] = await pool.query(
-        "SELECT locationId, name, lat, lon, city, street, origin FROM airly_stations"
+        "select locationId, name, lat, lon, city, street, origin from airly_stations"
     );
 
     airCoordinates = stations.map((loc) => ({
@@ -174,7 +173,7 @@ app.get("/api/airly", async (req, res) => {
     }));
 
     const [lastMeasurement] = await pool.query(
-      `Select timestamp from airly_measurements
+      `select timestamp from airly_measurements
       order by timestamp desc
       limit 1`
     )
@@ -243,7 +242,7 @@ app.get("/api/airly", async (req, res) => {
       }
 
       await pool.query(
-       `REPLACE INTO airly_measurements (station_id, aqi, params, timestamp) values (?, ?, ?, now())`,
+       `replace into airly_measurements (station_id, aqi, params, timestamp) values (?, ?, ?, now())`,
           [
             station.id,
             result.aqi,
@@ -255,9 +254,9 @@ app.get("/api/airly", async (req, res) => {
     } catch (err) {
       console.error("Detail fetch error for station:", station.id, err);
       return {
-            ...station,
-            measurements: null,
-            aqi: null
+        ...station,
+        measurements: null,
+        aqi: null
       };
     }
   }));
@@ -296,7 +295,7 @@ app.get("/api/warsawIoT", async (req, res) => {
 
   } catch (err) {
     console.error("Error downloading the data:", err);
-    res.status(500).json({error: "Error downloading the data"});
+    res.status(500).json({error: "warsawIoT fetch error"});
   }
 })
 
@@ -310,7 +309,7 @@ app.get("/api/aqicn", async (req, res) => {
     const url = `https://api.waqi.info/search/?keyword=${keyword}&token=${apiKey}`
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error("AQICN error");
+      throw new Error(`AQICN error, ${response.status} ${response.statusText}`);
     }
     const data = await response.json();
 
@@ -352,6 +351,7 @@ app.get("/api/aqicn", async (req, res) => {
         ...station,
         measurements: {
           co: iaqi.co?.v ?? null,
+          so2: iaqi.so2?.v ?? null,
           no2: iaqi.no2?.v ?? null,
           o3: iaqi.o3?.v ?? null,
           pm10: iaqi.pm10?.v ?? null,
