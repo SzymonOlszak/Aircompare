@@ -12,7 +12,7 @@ app.get("/api/openaq", async (req, res) => {
   const lat = 52.2297;
   const lon = 21.0122;
   const radius = 20000;
-  const apiKey = '67b897ddb5f0fbc65cdab9c01115fa763ca4ad5240292679988a951db098180b'
+  const apiKey = 'key'
   const AQcoordinates = [];
 
   try {
@@ -221,7 +221,7 @@ app.get("/api/airly", async (req, res) => {
       const response = await fetch(url, {
         headers: {
           method: "GET",
-          apikey: "f0TvSUUT3FrlEWD4jowv1TPXq51astfE"
+          apikey: "key"
         }
       });
       if (!response.ok) {
@@ -264,7 +264,7 @@ app.get("/api/airly", async (req, res) => {
 })
 
 app.get("/api/warsawIoT", async (req, res) => {
-  const apiKey = "85f54f85-d58b-443d-a121-0081f9451fa3";
+  const apiKey = "key";
   const url = `https://api.um.warszawa.pl/api/action/air_sensors_get/?apikey=${apiKey}`;
 
   try {
@@ -300,7 +300,7 @@ app.get("/api/warsawIoT", async (req, res) => {
 })
 
 app.get("/api/aqicn", async (req, res) => {
-  const apiKey = "ca09e110edc3446687444ae2b99bd6f278c12815";
+  const apiKey = "key";
   const keyword = "mazowieckie";
 
   let stations = [];
@@ -368,7 +368,7 @@ app.get("/api/aqicn", async (req, res) => {
 
 app.get("/api/wind", async(req, res) =>{
   let windDetails = {}
-  const apiKey = "AIzaSyAjfx9OWB5tj_iR-nGyUSjMMuvl3sOdKvs"
+  const apiKey = "key"
 
   try {
     const url = `https://weather.googleapis.com/v1/currentConditions:lookup?key=${apiKey}&location.latitude=52.2297&location.longitude=21.0122&units_system=METRIC`
