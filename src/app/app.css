@@ -5,10 +5,15 @@
   /*font-family: Montserrat, sans-serif;*/
   font-weight: 500;
   cursor: default;
+  background: #f4f4f5;
 }
 
 body {
-  max-width: 2600px;
+  max-width: 3000px;
+  /*margin: -20px auto 0 auto;*/
+  min-height: 1150px;
+  height: 110vh;
+  max-height: 1300px;
+  padding-top: 30px;
   margin: 0 auto;
-  min-height: 100vh;
 }
