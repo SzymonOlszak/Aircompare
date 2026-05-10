@@ -15,11 +15,11 @@ Architecture:<br>
 -Calculations-<br>
 `/src/app/interpolation` - contains functions calculating interpolation <br>
 `/src/app/prediction` - contains functions calculating predictions<br>
-`/src/app/aqi` - contains functions calculating aqi<br>
+`/src/app/aqi` - contains functions calculating AQI - air quality index<br>
 
 -Backend-<br>
-`/backend/server.js` - REST API for data distribution and real-time updates<br>
-`/backend/uploadStaticData.js` - optional REST API server, loads data into mySQL database<br>
+`/backend/server.js` - Core Node.js server handling REST API requests and real-time data distribution<br>
+`/backend/uploadStaticData.js` - Node.js script for migrating static data into the MySQL database<br>
 `/backend/base_aircompare.sql` - simple sql script creating MySQL database and tables<br>
 
 Tech Stack:
