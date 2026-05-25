@@ -5,7 +5,7 @@ import mysql from "mysql2/promise";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-require('dotenv').config();
+import 'dotenv/config';
 
 app.use(cors());
 app.get("/api/openaq", async (req, res) => {
