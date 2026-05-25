@@ -10,7 +10,7 @@ fetchOpenAQSensors()
 fetchAirlyStations()
 
 async function fetchAirlyStations() {
-  const airlyApiKey = "f0TvSUUT3FrlEWD4jowv1TPXq51astfE";
+  const airlyApiKey = process.env.AIRLY_API_KEY;
   const radius = 30;
   const maxResults = 30;
   try {
@@ -66,7 +66,7 @@ async function fetchAirlyStations() {
 
 async function fetchOpenAQSensors () {
   const opAQRadius = 20000;
-  const opAQapiKey = "67b897ddb5f0fbc65cdab9c01115fa763ca4ad5240292679988a951db098180b";
+  const opAQapiKey = process.env.OPENAQ_API_KEY;
   const opAQmaxResults = 200;
   try {
     const url = `https://api.openaq.org/v3/locations?coordinates=${lat},${lng}&radius=${opAQRadius}&limit=${opAQmaxResults}`;
@@ -196,22 +196,22 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function measurement() {
-  try {
-    const url = 'https://api.openaq.org/v3/sensors/36297/hours'
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-API-Key": opAQapiKey,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Error ${response.status}: ${response.statusText}`);
-    }
-    const DATA = await response.json()
-    console.log(JSON.stringify(DATA, null, 2))
-  } catch (err) {
-    console.log(err)
-  }
-}
+// async function measurement() {
+//   try {
+//     const url = 'https://api.openaq.org/v3/sensors/36297/hours'
+//     const response = await fetch(url, {
+//       method: "GET",
+//       headers: {
+//         "X-API-Key": opAQapiKey,
+//       },
+//     });
+//
+//     if (!response.ok) {
+//       throw new Error(`Error ${response.status}: ${response.statusText}`);
+//     }
+//     const DATA = await response.json()
+//     console.log(JSON.stringify(DATA, null, 2))
+//   } catch (err) {
+//     console.log(err)
+//   }
+// }

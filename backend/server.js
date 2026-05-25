@@ -5,6 +5,7 @@ import mysql from "mysql2/promise";
 
 const app = express();
 const PORT = 3000;
+require('dotenv').config();
 
 app.use(cors());
 app.get("/api/openaq", async (req, res) => {
@@ -12,7 +13,7 @@ app.get("/api/openaq", async (req, res) => {
   const lat = 52.2297;
   const lon = 21.0122;
   const radius = 20000;
-  const apiKey = 'key'
+  const apiKey = process.env.OPENAQ_API_KEY;
   const AQcoordinates = [];
 
   try {
@@ -221,7 +222,7 @@ app.get("/api/airly", async (req, res) => {
       const response = await fetch(url, {
         headers: {
           method: "GET",
-          apikey: "key"
+          apikey: process.env.AIRLY_API_KEY
         }
       });
       if (!response.ok) {
@@ -264,7 +265,7 @@ app.get("/api/airly", async (req, res) => {
 })
 
 app.get("/api/warsawIoT", async (req, res) => {
-  const apiKey = "key";
+  const apiKey = process.env.WARSAWIOT_API_KEY;
   const url = `https://api.um.warszawa.pl/api/action/air_sensors_get/?apikey=${apiKey}`;
 
   try {
@@ -300,7 +301,7 @@ app.get("/api/warsawIoT", async (req, res) => {
 })
 
 app.get("/api/aqicn", async (req, res) => {
-  const apiKey = "key";
+  const apiKey = process.env.AQICN_API_KEY;
   const keyword = "mazowieckie";
 
   let stations = [];
@@ -368,7 +369,7 @@ app.get("/api/aqicn", async (req, res) => {
 
 app.get("/api/wind", async(req, res) =>{
   let windDetails = {}
-  const apiKey = "key"
+  const apiKey = process.env.GOOGLEAPIS_API_KEY;
 
   try {
     const url = `https://weather.googleapis.com/v1/currentConditions:lookup?key=${apiKey}&location.latitude=52.2297&location.longitude=21.0122&units_system=METRIC`
